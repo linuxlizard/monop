@@ -8,8 +8,9 @@
 #include <random>
 #include <cstring>
 #include <cerrno>
-#include <sstream>
 #include <ranges>
+#include <vector>
+#include <functional>
 #include <string_view>
 #include <utility>
 #include <fmt/format.h>
@@ -27,54 +28,6 @@ int roll_die()
 	std::uniform_int_distribution<> distr(1, 6);
 	return distr(gen);
 }
-
-class Player
-{
-public:
-	explicit Player(uint cash) : cash{cash}, position{0}, _passed_go{false} {};
-
-	std::pair<uint,uint> roll() {
-		die1 = roll_die();
-		die2 = roll_die();
-		return std::make_pair(die1,die2);
-	}
-
-	uint move() {
-		position += die1 + die2;
-
-		if (position > BOARD_SIZE) {
-			_passed_go = true;
-			position = position % BOARD_SIZE;
-		}
-		else {
-			_passed_go = false;
-		}
-
-		return position;
-	}
-
-	void add_money(uint moola) { cash += moola; }
-
-	uint where() { return position; }
-
-	bool passed_go() {
-		return _passed_go;
-	}
-
-	[[nodiscard]] uint getCash() const {
-		return cash;
-	}
-
-private:
-	uint cash;
-
-	// where I am on the board (index)
-	uint position;
-
-	uint die1, die2;
-
-	bool _passed_go;
-};
 
 enum Rent
 {
@@ -104,24 +57,40 @@ public:
 	const std::string name;
 };
 
+template<typename Ownable>
+struct Owner : Ownable
+{
+	explicit Owner(Ownable const& ownable) : Ownable(ownable) {}
+	
+	[[nodiscard]] std::optional<uint> get_owner() const
+	{
+		return this->_get_owner();
+	}
+};
+
 class Property {
 public:
 	Property() = delete;
 
-	explicit Property(std::string  name, std::vector<uint> values);
+	explicit Property(std::string name, std::vector<uint> values);
 
 	const std::string name;
 
 	uint get_rent(enum Rent r) { return this->rents.at(r); };
 	[[nodiscard]] uint get_purchase_price() const { return this->purchase_price; };
 
+	[[nodiscard]] std::optional<uint> _get_owner () const { return owner; };
+
+	void set_owner(uint player_idx) { owner = player_idx; };
+
 private:
 	uint purchase_price;
 	uint house_cost;
 	std::array<uint,7> rents{};
+	std::optional<uint> owner;
 };
 
-Property::Property(std::string  name, std::vector<uint> values)
+Property::Property(std::string name, std::vector<uint> values)
 	: name(std::move(name))
 {
 	if (values.size() != 9) {
@@ -171,6 +140,131 @@ public:
 
 using Space = std::variant<GoCard, Property, CommunityChest, Chance, Penalty, Railroad, Utility>;
 
+struct PlayerStats
+{
+	// counters;
+	uint passed_go;
+	uint properties_purchased;
+	uint money_spent;
+};
+
+class Player
+{
+public:
+	explicit Player(std::string name, int cash) :
+			name{std::move(name)},
+			cash{cash},
+			position{0},
+			_passed_go{false},
+			die1{0},
+			die2{0},
+			stats{{}}
+			{};
+
+	std::pair<uint,uint> roll() {
+		die1 = roll_die();
+		die2 = roll_die();
+		return std::make_pair(die1,die2);
+	}
+
+	void sanity_check() const
+	{
+		// sanity check as the game continues
+		if (cash < 0) {
+			std::string msg = fmt::format("error! player {} has negative cash={}\n", name, cash);
+			throw std::runtime_error(msg);
+		}
+	}
+
+	uint move()
+	{
+		sanity_check();
+
+		position += die1 + die2;
+
+		_passed_go = false;
+		if (position >= BOARD_SIZE) {
+			_passed_go = true;
+			stats.passed_go += 1;
+			position = position % BOARD_SIZE;
+		}
+
+		return position;
+	}
+
+	void add_money(int new_money) { cash += new_money; }
+
+	[[nodiscard]] bool passed_go() const { return _passed_go; }
+
+	const std::string name;
+
+	bool buys(const Property &property);
+
+	std::string get_stats();
+
+	std::vector<uint> get_owned_list();
+
+	[[nodiscard]] std::vector<uint>::const_iterator owned_cbegin() const {
+		return property_owned.cbegin();
+	}
+
+	[[nodiscard]] std::vector<uint>::const_iterator owned_cend() const {
+		return property_owned.cend();
+	}
+
+private:
+	// note signed integer so can detect negative
+	int cash;
+	// where I am on the board (index)
+	uint position;
+	uint die1, die2;
+	bool _passed_go;
+
+	std::vector<uint> property_owned;
+
+	struct PlayerStats stats;
+};
+
+std::string Player::get_stats() {
+	return fmt::format("passed_go={} purchased={} spent={} cash={}",
+					   stats.passed_go, stats.properties_purchased, stats.money_spent, cash);
+}
+
+bool Player::buys(const Property &property)
+{
+	sanity_check();
+
+	int price = static_cast<int>(property.get_purchase_price());
+	if (price <= cash) {
+		// always buy if we have enough money
+		cash -= price;
+
+		fmt::print("{} buys {} for {} and has {} remaining\n",
+		           name, property.name, property.get_purchase_price(), cash);
+
+		stats.properties_purchased += 1;
+		stats.money_spent += price;
+
+		// track owned properties by the board position
+		// the Property argument is inside a std::variant and
+		// can't be stored (???)
+		property_owned.emplace_back(position);
+
+		return true;
+	}
+
+	fmt::print("{} only has {} left and cannot pay {} for {}\n",
+	           name, cash, property.get_purchase_price(), property.name );
+	return false;
+}
+
+std::vector<uint> Player::get_owned_list()
+{
+	// return a copy
+	// TODO I bet there's a cleaner way to do this
+	return property_owned;
+}
+
 Space parse_board_line(const std::string &line) {
 	// https://www.youtube.com/watch?v=V14xGZAyVKI
 	auto split_strings = std::ranges::views::split(line, ',');
@@ -178,18 +272,17 @@ Space parse_board_line(const std::string &line) {
 	std::vector<std::string> tokens;
 
 	for (const auto &rng: split_strings) {
-
 		tokens.emplace_back(rng.begin(), rng.end());
 	}
 
-	fmt::print("size={}\n", tokens.size());
+//	fmt::print("size={}\n", tokens.size());
 
 	tokens.clear();
 	std::ranges::copy(split_strings | std::ranges::views::transform([](auto &&rng) {
 		std::string s(rng.begin(), rng.end());
 		return s;
 	}), std::back_inserter(tokens));
-	fmt::print("found len={} tokens. First={}\n", tokens.size(), tokens[0]);
+//	fmt::print("found len={} tokens. First={}\n", tokens.size(), tokens[0]);
 
 	if (tokens.size() == 10) {
 		// we found a property; convert rest of tokens into integers
@@ -271,15 +364,8 @@ std::vector<Space> load_board(const std::string &file_name)
 	return board;
 }
 
-#if 0
-struct GetName
+int main()
 {
-	void get_name()(const Property& p) const { fmt::print("name={}\n", p.name); };
-
-};
-#endif
-
-int main() {
 	std::cout << "Hello, World!" << std::endl;
 
 	const std::string board_filename { "/home/dpoole/src/monop/board.txt" };
@@ -287,26 +373,64 @@ int main() {
 
 	assert(board.size() == BOARD_SIZE && "The board must contain 40 elements.");
 
-	Player p1 { 1500 };
-	Player p2 { 1500 };
+	std::vector<Player> player_list;
 
-	for (int i=0 ; i<10 ; i++ ) {
-		auto roll = p1.roll();
+	player_list.emplace_back( "Dave", 1500 );
+	player_list.emplace_back( "Sarah", 1500 );
 
-		fmt::print("You rolled {} {}\n", roll.first, roll.second);
+	for (uint i=0 ; i<20 ; i++ ) {
+		for ( uint player_idx=0 ; player_idx<player_list.size() ; player_idx++ ) {
 
-		uint pos = p1.move();
+			while (true) {
+				Player &player = player_list.at(player_idx);
+				auto roll = player.roll();
+				fmt::print("Player {} rolled {} {}\n", player.name, roll.first, roll.second);
+				uint pos = player.move();
 
-		auto land = board.at(pos);
+				auto land = board.at(pos);
+				std::visit([&player](auto &&arg) { fmt::print("player {} landed on {}\n", player.name, arg.name); }, land);
 
-		//std::visit(GetName{}, land);
-		std::visit([](auto&& arg){ fmt::print("{}\n",arg.name); }, land);
+				if (player.passed_go()) {
+					fmt::print("player {} has passed Go and earns 200!\n", player.name);
+					player.add_money(200);
+				}
 
-		if (p1.passed_go()) {
-			fmt::print("player has passed Go!\n");
-			p1.add_money(200);
+				if (std::holds_alternative<Property>(land)) {
+					Property & property = std::get<Property>(land);
+
+					Owner o(property);
+
+					if (!o.get_owner()) {
+						fmt::print("{} is unowned\n", property.name);
+
+						if (player.buys(property)) {
+							property.set_owner(player_idx);
+						}
+					}
+				}
+
+				bool rolled_doubles = roll.first == roll.second;
+				if (rolled_doubles) {
+					// TODO goto jail on rolling three doubles
+					fmt::print("{} rolled doubles!\n", player.name);
+					continue;
+				}
+
+				fmt::print("{} has completed their turn\n", player.name);
+				break;
+			};
+		}
+	}
+
+	for (Player& player : player_list) {
+		std::vector<uint> owned { player.get_owned_list() };
+		for (auto b = player.owned_cbegin() ; b < player.owned_cend() ; b++) {
+			auto space = board.at(*b);
+			Property & property = std::get<Property>(space);
+			fmt::print("{} owns {}\n", player.name, property.name);
 		}
 
+		fmt::print("{} stats {}\n", player.name, player.get_stats());
 	}
 
 	return 0;
