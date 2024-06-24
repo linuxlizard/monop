@@ -16,303 +16,9 @@
 #include <fmt/format.h>
 #include <cassert>
 
-// spaces on the monopoly board
-const uint BOARD_SIZE = 40;
+#include "board.h"
+#include "player.h"
 
-// clion AI Assistant
-// FIXME probably don't need to initialize all these every time
-int roll_die()
-{
-	std::random_device rd;
-	std::mt19937 gen(rd());
-	std::uniform_int_distribution<> distr(1, 6);
-	return distr(gen);
-}
-
-enum Rent
-{
-	NO_HOUSES,
-	ALL_COLORS,  // rent doubled when all color block is owned
-	ONE_HOUSE,
-	TWO_HOUSES,
-	THREE_HOUSES,
-	FOUR_HOUSES,
-	HOTEL
-};
-
-class Card
-{
-public:
-	explicit Card(std::string name) : name{std::move(name)} {};
-	explicit Card(const char *name) : name(name) {};
-
-	const std::string name;
-};
-
-class GoCard
-{
-public:
-	explicit GoCard(std::string name) : name{std::move(name)} {};
-
-	const std::string name;
-};
-
-#if 0
-template<typename Ownable>
-struct Owner : Ownable
-{
-	explicit Owner(Ownable const& ownable ) : Ownable(ownable) {}
-
-	Owner() = delete;
-	Owner(Owner& other) = delete;
-
-	[[nodiscard]] std::optional<uint> get_owner() const
-	{
-		return this->_get_owner();
-	}
-};
-#endif
-
-template<typename T> std::optional<uint> get_owner( T& c)
-{
-	return c._get_owner();
-}
-
-class Property {
-public:
-	Property() = delete;
-	Property(Property&) = delete;
-
-	Property(Property&&) = default;
-
-	explicit Property(std::string name, std::vector<uint> values);
-
-	const std::string name;
-
-	uint get_rent(enum Rent r) { return this->rents.at(r); };
-	[[nodiscard]] uint get_purchase_price() const { return this->purchase_price; };
-
-	[[nodiscard]] std::optional<uint> _get_owner () const { return owner; };
-
-	void set_owner(uint player_idx) {
-		assert( !owner );
-		owner = player_idx;
-		// verify owner is now player_idx
-		assert(owner);
-		assert(_get_owner() == player_idx);
-
-	};
-
-private:
-	uint purchase_price;
-	uint house_cost;
-	std::array<uint,7> rents{};
-	std::optional<uint> owner;
-};
-
-Property::Property(std::string name, std::vector<uint> values)
-	: name(std::move(name))
-{
-	if (values.size() != 9) {
-		std::string msg = fmt::format("expected 9 values but found {}", values.size());
-		throw std::runtime_error(msg);
-	}
-
-	this->purchase_price = values[0];
-	this->house_cost = values[1];
-	std::copy(values.begin() + 2, values.end(), this->rents.begin());
-}
-
-class Railroad
-{
-public:
-	explicit Railroad(std::string  name) : name(std::move(name)) { };
-	const std::string name;
-};
-
-class Penalty
-{
-public:
-	explicit Penalty(std::string  name) : name(std::move(name)) { };
-	const std::string name;
-};
-
-class CommunityChest
-{
-public:
-	explicit CommunityChest() : name("Community Chest") {};
-	const std::string name;
-};
-
-class Chance
-{
-public:
-	explicit Chance() : name("Chance") {};
-	const std::string name;
-};
-
-class Utility
-{
-public:
-	explicit Utility(std::string  name) : name(std::move(name)) {};
-	const std::string name;
-};
-
-using Space = std::variant<GoCard, Property, CommunityChest, Chance, Penalty, Railroad, Utility>;
-
-struct PlayerStats
-{
-	// counters;
-	uint moves;
-	uint passed_go;
-	uint properties_purchased;
-	uint money_spent;
-	uint doubles;
-	uint rent_paid;
-	uint rent_earned;
-};
-
-class Player
-{
-public:
-	explicit Player(std::string name, int cash) :
-			name{std::move(name)},
-			cash{cash},
-			position{0},
-			_passed_go{false},
-			die1{0},
-			die2{0},
-			stats{{}}
-			{};
-
-	std::pair<uint,uint> roll()
-	{
-		die1 = roll_die();
-		die2 = roll_die();
-		if (die1 == die2) {
-			stats.doubles += 1;
-		}
-		return std::make_pair(die1,die2);
-	}
-
-	void sanity_check() const
-	{
-		// sanity check as the game continues
-		if (cash < 0) {
-			std::string msg = fmt::format("error! player {} has negative cash={}\n", name, cash);
-			throw std::runtime_error(msg);
-		}
-	}
-
-	uint move()
-	{
-		sanity_check();
-		stats.moves += 1;
-
-		position += die1 + die2;
-
-		_passed_go = false;
-		if (position >= BOARD_SIZE) {
-			_passed_go = true;
-			stats.passed_go += 1;
-			position = position % BOARD_SIZE;
-		}
-
-		return position;
-	}
-
-	void add_money(int new_money) { cash += new_money; }
-
-	[[nodiscard]] bool passed_go() const { return _passed_go; }
-
-	const std::string name;
-
-	bool buys(const Property &property);
-
-	std::string get_stats();
-
-	[[nodiscard]] std::vector<uint>::const_iterator owned_cbegin() const {
-		return property_owned.cbegin();
-	}
-
-	[[nodiscard]] std::vector<uint>::const_iterator owned_cend() const {
-		return property_owned.cend();
-	}
-
-	uint pay_rent(uint rent);
-
-	void earn_rent(uint rent) {
-		add_money(rent);
-		stats.rent_earned += rent;
-	}
-
-private:
-	// note signed integer so can detect negative
-	int cash;
-	// where I am on the board (index)
-	uint position;
-	uint die1, die2;
-	bool _passed_go;
-
-	std::vector<uint> property_owned;
-
-	struct PlayerStats stats;
-
-};
-
-std::string Player::get_stats() {
-	return fmt::format("moves={} passed_go={} doubles={} purchased={} spent={} rent_paid={} rent_earned={} cash={}",
-					   stats.moves, stats.passed_go, stats.doubles, stats.properties_purchased,
-					   stats.money_spent, stats.rent_paid, stats.rent_earned, cash);
-}
-
-bool Player::buys(const Property &property)
-{
-	sanity_check();
-
-	int price = static_cast<int>(property.get_purchase_price());
-	if (price <= cash) {
-		// always buy if we have enough money
-		// TODO we'll want to raise money to buy valuable properties
-		//  (e.g, mortgage something to buy Boardwalk)
-		cash -= price;
-
-		fmt::print("{} buys {} for {} and has {} remaining\n",
-		           name, property.name, property.get_purchase_price(), cash);
-
-		stats.properties_purchased += 1;
-		stats.money_spent += price;
-
-		// track owned properties by the board position because
-		// the Property argument is inside a std::variant and
-		// can't be stored (I think???)
-
-		// sanity check for duplicates:
-		assert(std::find(property_owned.begin(), property_owned.end(), position) == property_owned.end());
-
-		property_owned.emplace_back(position);
-
-		return true;
-	}
-
-	fmt::print("{} only has {} left and cannot pay {} for {}\n",
-	           name, cash, property.get_purchase_price(), property.name );
-	return false;
-}
-
-uint Player::pay_rent(uint rent)
-{
-	if (rent > cash)
-	{
-		fmt::print("player {} is bankrupt!", name);
-		throw std::runtime_error("unimplemented");
-	}
-	stats.rent_paid += rent;
-	stats.money_spent += rent;
-
-	cash -= rent;
-	return rent;
-}
 
 Space parse_board_line(const std::string &line) {
 	// https://www.youtube.com/watch?v=V14xGZAyVKI
@@ -362,7 +68,11 @@ Space parse_board_line(const std::string &line) {
 		return Chance();
 	}
 	if (tokens[0] == "Income Tax") {
-		return Penalty(tokens[0]);
+		return Penalty(tokens[0], PENALTY_INCOME_TAX);
+	}
+
+	if (tokens[0] == "Luxury Tax") {
+		return Penalty(tokens[0], PENALTY_LUXURY_TAX);
 	}
 
 	fmt::print("railroad? {} {}\n", tokens[0].at(tokens[0].size() - 1), tokens[0].at(tokens[0].size() - 2));
@@ -371,8 +81,12 @@ Space parse_board_line(const std::string &line) {
 		return Railroad(tokens[0]);
 	}
 
-	if (tokens[0] == "Jail" || tokens[0] == "Go To Jail" || tokens[0] == "Luxury Tax") {
-		return Penalty(tokens[0]);
+	if (tokens[0] == "Jail") {
+		return Utility(tokens[0]);
+	}
+
+	if (tokens[0] == "Go To Jail") {
+		return Penalty(tokens[0], PENALTY_GO_TO_JAIL);
 	}
 
 	if (tokens[0] == "Electric Company" || tokens[0] == "Water Works") {
@@ -413,6 +127,28 @@ std::vector<Space> load_board(const std::string &file_name)
 	}
 
 	return board;
+}
+
+void calculate_penalty(Penalty& penalty, Player& player)
+{
+	switch (penalty.penalty_type) {
+		case PENALTY_INCOME_TAX:
+			player.pay_tax(200);
+			break;
+
+		case PENALTY_LUXURY_TAX:
+			player.pay_tax(100);
+			break;
+
+		case PENALTY_GO_TO_JAIL:
+			player.go_to_jail();
+			break;
+
+		default:
+			std::string msg = fmt::format("{} unhandled PenaltyType {}",
+										  __func__, static_cast<int>(penalty.penalty_type));
+			throw std::runtime_error(msg);
+	}
 }
 
 int main()
@@ -477,6 +213,13 @@ int main()
 							property.set_owner(player_idx);
 						}
 					}
+				}
+				else if (std::holds_alternative<Penalty>(land)) {
+					auto& penalty = std::get<Penalty>(land);
+
+					fmt::print("{} lands on a penalty {}\n", player.name, penalty.name);
+
+					calculate_penalty(penalty,player);
 				}
 
 				if (rolled_doubles) {
