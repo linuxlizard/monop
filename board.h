@@ -86,8 +86,29 @@ private:
 class Railroad
 {
 public:
-	explicit Railroad(std::string  name) : name(std::move(name)) { };
+	explicit Railroad(std::string  name) : name(std::move(name)) { }
 	const std::string name;
+
+	static constexpr std::array<uint,5> rr_rent { 0, 25, 50, 100, 200 };
+
+	[[nodiscard]] std::optional<uint> _get_owner () const { return owner; }
+	[[nodiscard]] static uint get_purchase_price()  { return 200; }
+
+	[[nodiscard]] static uint get_rent(uint count)
+	{
+		return rr_rent.at(count);
+	}
+
+	void set_owner(uint player_idx) {
+		assert( !owner );
+		owner = player_idx;
+		// verify owner is now player_idx
+		assert(owner);
+		assert(_get_owner() == player_idx);
+	}
+
+private:
+	std::optional<uint> owner;
 };
 
 class Penalty
@@ -121,5 +142,9 @@ public:
 };
 
 using Space = std::variant<GoCard, Property, CommunityChest, Chance, Penalty, Railroad, Utility>;
+
+std::vector<Space> load_board(const std::string &file_name);
+
+std::string get_name(const Space& space);
 
 #endif //MONOP_BOARD_H

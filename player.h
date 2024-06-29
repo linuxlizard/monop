@@ -19,6 +19,7 @@ struct PlayerStats
 	uint rent_paid;
 	uint rent_earned;
 	uint taxes_paid;
+	int go_to_jail;
 };
 
 class Player
@@ -29,9 +30,11 @@ public:
 			cash{cash},
 			position{0},
 			_passed_go{false},
+			jail_counter{0},
 			die1{0},
 			die2{0},
-			stats{{}}
+			stats{{}},
+			_railroads_owned{0}
 	{};
 
 	std::pair<uint,uint> roll()
@@ -53,22 +56,7 @@ public:
 		}
 	}
 
-	uint move()
-	{
-		sanity_check();
-		stats.moves += 1;
-
-		position += die1 + die2;
-
-		_passed_go = false;
-		if (position >= BOARD_SIZE) {
-			_passed_go = true;
-			stats.passed_go += 1;
-			position = position % BOARD_SIZE;
-		}
-
-		return position;
-	}
+	uint move();
 
 	void add_money(int new_money) { cash += new_money; }
 
@@ -77,6 +65,9 @@ public:
 	const std::string name;
 
 	bool buys(const Property &property);
+	bool buys(const Railroad &rr);
+
+	[[nodiscard]] uint railroads_owned() const { return _railroads_owned; }
 
 	std::string get_stats();
 
@@ -90,12 +81,25 @@ public:
 
 	uint pay_rent(uint rent);
 	void pay_tax(uint tax);
-	void go_to_jail();
 
 	void earn_rent(uint rent) {
 		add_money(rent);
 		stats.rent_earned += rent;
 	}
+
+	void go_to_jail();
+	[[nodiscard]] bool in_jail() const { return jail_counter > 0; };
+	void leave_jail() { jail_counter = 0; };
+
+	[[nodiscard]] bool do_jail_turn()
+	{
+		// TODO add option for $50 bail
+		jail_counter += 1;
+		if (jail_counter > 3) {
+			return true;
+		}
+		return false;
+	};
 
 private:
 	// note signed integer so can detect negative
@@ -103,12 +107,17 @@ private:
 	// where I am on the board (index)
 	uint position;
 	uint die1, die2;
+
 	bool _passed_go;
+	uint jail_counter;
 
 	std::vector<uint> property_owned;
 
+	uint _railroads_owned;
+
 	struct PlayerStats stats;
 
+	bool buy_something(const std::string & name, uint price);
 };
 
 #endif //MONOP_PLAYER_H
