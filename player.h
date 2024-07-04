@@ -28,13 +28,8 @@ public:
 	explicit Player(std::string name, int cash) :
 			name{std::move(name)},
 			cash{cash},
-			position{0},
-			_passed_go{false},
-			jail_counter{0},
-			die1{0},
-			die2{0},
-			stats{{}},
-			_railroads_owned{0}
+
+			stats{{}}
 	{};
 
 	std::pair<uint,uint> roll()
@@ -62,7 +57,7 @@ public:
 
 	[[nodiscard]] bool passed_go() const { return _passed_go; }
 
-	const std::string name;
+	const std::string name{};
 
 	bool buys(const Property &property);
 	bool buys(const Railroad &rr);
@@ -103,19 +98,19 @@ public:
 
 private:
 	// note signed integer so can detect negative
-	int cash;
+	int cash {0};
 	// where I am on the board (index)
-	uint position;
-	uint die1, die2;
+	uint position {0};
+	uint die1 {0}, die2 {0};
 
-	bool _passed_go;
-	uint jail_counter;
+	bool _passed_go {false};
+	uint jail_counter {0};
 
-	std::vector<uint> property_owned;
+	std::vector<uint> property_owned {};
 
-	uint _railroads_owned;
+	uint _railroads_owned {0};
 
-	struct PlayerStats stats;
+	struct PlayerStats stats {};
 
 	bool buy_something(const std::string & name, uint price);
 };
