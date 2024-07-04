@@ -29,38 +29,36 @@ enum PenaltyType
 	PENALTY_GO_TO_JAIL
 };
 
-class Card
-{
-public:
-	explicit Card(std::string name) : name{std::move(name)} {};
-	explicit Card(const char *name) : name(name) {};
-
-	const std::string name;
-};
-
-class GoCard
-{
-public:
-	explicit GoCard(std::string name) : name{std::move(name)} {};
-
-	const std::string name;
-};
-
 template<typename T> std::optional<uint> get_owner( T& c)
 {
 	return c._get_owner();
 }
 
-class Property {
+class Card
+{
 public:
+	Card(std::string name)
+		: name{std::move(name)}
+	{}
+
+	const std::string name{};
+};
+
+class GoCard : public Card
+{
+
+};
+
+class Property : public Card
+{
+public:
+	// let's make sure we know how to properly move (no copies)
 	Property() = delete;
 	Property(Property&) = delete;
 
 	Property(Property&&) = default;
 
 	explicit Property(std::string name, std::vector<uint> values);
-
-	const std::string name;
 
 	uint get_rent(enum Rent r) { return this->rents.at(r); };
 	[[nodiscard]] uint get_purchase_price() const { return this->purchase_price; };
@@ -77,17 +75,18 @@ public:
 	};
 
 private:
-	uint purchase_price;
-	uint house_cost;
+	uint purchase_price {0};
+	uint house_cost {0};
 	std::array<uint,7> rents{};
-	std::optional<uint> owner;
+	std::optional<uint> owner {};
 };
 
-class Railroad
+class Railroad : public Card
 {
 public:
-	explicit Railroad(std::string  name) : name(std::move(name)) { }
-	const std::string name;
+	explicit Railroad(std::string name)
+		: Card(std::move(name)), owner {}
+	{}
 
 	static constexpr std::array<uint,5> rr_rent { 0, 25, 50, 100, 200 };
 
@@ -108,37 +107,32 @@ public:
 	}
 
 private:
-	std::optional<uint> owner;
+	std::optional<uint> owner{};
 };
 
-class Penalty
+class Penalty : public Card
 {
 public:
-	explicit Penalty(std::string name, enum PenaltyType penalty_type) : name(std::move(name)), penalty_type(penalty_type) { };
-//	explicit Penalty(std::string name) : name(std::move(name)) { };
-	const std::string name;
+	explicit Penalty(std::string name, enum PenaltyType penalty_type)
+			: Card(std::move(name)), penalty_type(penalty_type)
+			{ };
+
 	const enum PenaltyType penalty_type;
 };
 
-class CommunityChest
+class CommunityChest : public Card
 {
-public:
-	explicit CommunityChest() : name("Community Chest") {};
-	const std::string name;
+
 };
 
-class Chance
+class Chance : public Card
 {
-public:
-	explicit Chance() : name("Chance") {};
-	const std::string name;
+
 };
 
-class Utility
+class Utility : public Card
 {
-public:
-	explicit Utility(std::string  name) : name(std::move(name)) {};
-	const std::string name;
+
 };
 
 using Space = std::variant<GoCard, Property, CommunityChest, Chance, Penalty, Railroad, Utility>;

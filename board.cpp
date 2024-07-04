@@ -2,6 +2,7 @@
 // Created by dpoole on 6/24/24.
 //
 #include <string>
+#include <utility>
 #include <vector>
 #include <fmt/format.h>
 #include <ranges>
@@ -10,7 +11,7 @@
 #include "board.h"
 
 Property::Property(std::string name, std::vector<uint> values)
-		: name(std::move(name))
+		: Card(std::move(name))
 {
 	if (values.size() != 9) {
 		std::string msg = fmt::format("expected 9 values but found {}", values.size());
@@ -65,10 +66,10 @@ Space parse_board_line(const std::string &line) {
 	}
 
 	if (tokens[0] == "Community Chest") {
-		return CommunityChest();
+		return Space { std::in_place_type<CommunityChest>, tokens[0] };
 	}
 	if (tokens[0] == "Chance") {
-		return Chance();
+		return Chance(tokens[0]);
 	}
 	if (tokens[0] == "Income Tax") {
 		return Penalty(tokens[0], PENALTY_INCOME_TAX);
@@ -81,7 +82,7 @@ Space parse_board_line(const std::string &line) {
 	fmt::print("railroad? {} {}\n", tokens[0].at(tokens[0].size() - 1), tokens[0].at(tokens[0].size() - 2));
 
 	if (tokens[0].at(tokens[0].size() - 1) == 'R' && tokens[0].at(tokens[0].size() - 2) == 'R') {
-		return Railroad(tokens[0]);
+		return Railroad {tokens[0]};
 	}
 
 	if (tokens[0] == "Jail") {
@@ -140,3 +141,4 @@ std::vector<Space> load_board(const std::string &file_name)
 std::string get_name(const Space& space) {
 	return std::visit([](auto &&arg) -> std::string { return arg.name; }, space);
 }
+
