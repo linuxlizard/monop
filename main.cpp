@@ -134,7 +134,7 @@ int main()
 						if ( owner != player_idx ) {
 							// owner is not self so rent must be paid
 //							uint rent = property.get_rent(NO_HOUSES);
-							uint rent = rr.get_rent(owner_player.railroads_owned());
+							uint rent = Railroad::get_rent(owner_player.railroads_owned());
 							fmt::print("{} must pay {} {} in rent on Railroad(s)\n", player.name, owner_player.name, rent);
 							owner_player.earn_rent( player.pay_rent(rent));
 						}
@@ -147,15 +147,18 @@ int main()
 						}
 					}
 				}
-
-
-				if (rolled_doubles) {
-					fmt::print("{} has rolled doubles and gets another turn\n", player.name);
-					continue;
+				else if (std::holds_alternative<CommunityChest>(land)) {
+					fmt::print("{} lands on Community Chest", player.name);
+				}
+				else if (std::holds_alternative<Chance>(land)) {
+					fmt::print("{} lands on Chance", player.name);
 				}
 
-				fmt::print("{} has completed their turn\n", player.name);
-				break;
+				if (!rolled_doubles) {
+					fmt::print("{} has completed their turn\n", player.name);
+					break;
+				}
+				fmt::print("{} has rolled doubles and gets another turn\n", player.name);
 			}
 		}
 	}

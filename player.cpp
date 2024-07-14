@@ -17,38 +17,37 @@ std::string Player::get_stats() {
 
 bool Player::buy_something( const std::string& object_name, uint price)
 {
-	if (price <= cash) {
-		// always buy if we have enough money
-		// TODO we'll want to raise money to buy valuable properties
-		//  (e.g, mortgage something to buy Boardwalk)
-		cash -= static_cast<int>(price);
-
-		fmt::print("{} buys {} for {} and has {} remaining\n",
-		           name, object_name, price, cash);
-
-		stats.properties_purchased += 1;
-		stats.money_spent += price;
-
-		// track owned properties by the board position because
-		// the Property argument is inside a std::variant and
-		// can't be stored (I think???)
-
-		// sanity check for duplicates:
-		assert(std::find(property_owned.begin(), property_owned.end(), position) == property_owned.end());
-
-		property_owned.emplace_back(position);
-
-		return true;
+	if (price > cash) {
+		fmt::print("{} only has {} left and cannot pay {} for {}\n",
+		           name, cash, price, object_name );
+		return false;
 	}
 
-	fmt::print("{} only has {} left and cannot pay {} for {}\n",
-	           name, cash, price, object_name );
-	return false;
+	// always buy if we have enough money
+	// TODO we'll want to raise money to buy valuable properties
+	//  (e.g, mortgage something to buy Boardwalk)
+	cash -= static_cast<int>(price);
+
+	fmt::print("{} buys {} for {} and has {} remaining\n",
+	           name, object_name, price, cash);
+
+	stats.properties_purchased += 1;
+	stats.money_spent += price;
+
+	// track owned properties by the board position because
+	// the Property argument is inside a std::variant and
+	// can't be stored (I think???)
+
+	// sanity check for duplicates:
+	assert(std::find(property_owned.begin(), property_owned.end(), position) == property_owned.end());
+
+	property_owned.emplace_back(position);
+
+	return true;
 }
 
 bool Player::buys(const Property &property)
 {
-
 	sanity_check();
 	uint price = property.get_purchase_price();
 
@@ -58,13 +57,12 @@ bool Player::buys(const Property &property)
 bool Player::buys(const Railroad &rr)
 {
 	sanity_check();
-	uint price = static_cast<int>(rr.get_purchase_price());
 
-	bool flag = buy_something(rr.name, price);
-	if (flag) {
+	if (buy_something(rr.name, Railroad::get_purchase_price())) {
 		_railroads_owned += 1;
+		return true;
 	}
-	return flag;
+	return false;
 }
 
 uint Player::pay_rent(uint rent)
@@ -72,6 +70,7 @@ uint Player::pay_rent(uint rent)
 	if (rent > cash)
 	{
 		fmt::print("player {} is bankrupt!\n", name);
+		// TODO bankruptcy
 		throw std::runtime_error("unimplemented");
 	}
 	stats.rent_paid += rent;

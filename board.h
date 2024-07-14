@@ -122,17 +122,17 @@ public:
 
 class CommunityChest : public Card
 {
-
+	// TODO
 };
 
 class Chance : public Card
 {
-
+	// TODO
 };
 
 class Utility : public Card
 {
-
+	// TODO
 };
 
 using Space = std::variant<GoCard, Property, CommunityChest, Chance, Penalty, Railroad, Utility>;

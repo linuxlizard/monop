@@ -89,11 +89,7 @@ public:
 	[[nodiscard]] bool do_jail_turn()
 	{
 		// TODO add option for $50 bail
-		jail_counter += 1;
-		if (jail_counter > 3) {
-			return true;
-		}
-		return false;
+		return ++jail_counter > 3;
 	};
 
 private:
